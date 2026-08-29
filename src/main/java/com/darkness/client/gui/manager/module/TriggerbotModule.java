@@ -167,4 +167,4 @@ public class TriggerbotModule extends Module {
         .min(Comparator.comparingDouble(client.player::distanceTo))
         .orElse(null);
     }
-}
+        }
