@@ -6,6 +6,7 @@ import net.minecraft.item.AxeItem;
 import net.minecraft.item.Items;
 import net.minecraft.item.MaceItem;
 import net.minecraft.registry.tag.ItemTags;
+import net.minecraft.util.Hand;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.MathHelper;
@@ -49,7 +50,7 @@ public class TriggerbotModule extends Module {
     private final Setting<Boolean> targetPrediction =
             new Setting<>("TargetPrediction", true);
 
-    private long nextAttackTime = 0;
+    private long nextAttackTime = 0L;
 
     public TriggerbotModule() {
         super("Triggerbot", Category.COMBAT);
@@ -80,9 +81,9 @@ public class TriggerbotModule extends Module {
 
             boolean isWeapon =
                     mainStack.isIn(ItemTags.SWORDS)
-                    || mainStack.getItem() instanceof AxeItem
-                    || mainStack.getItem() instanceof MaceItem
-                    || mainStack.isOf(Items.MACE);
+                            || mainStack.getItem() instanceof AxeItem
+                            || mainStack.getItem() instanceof MaceItem
+                            || mainStack.isOf(Items.MACE);
 
             if (!isWeapon) {
                 return;
@@ -95,7 +96,7 @@ public class TriggerbotModule extends Module {
             target = findBestTarget(client);
 
             if (target != null) {
-                applyAdvancedSilentAim(client, target);
+                applyAdvancedAim(client, target);
             }
         } else if (client.crosshairTarget instanceof EntityHitResult hit
                 && hit.getEntity() instanceof LivingEntity living) {
@@ -120,47 +121,43 @@ public class TriggerbotModule extends Module {
 
         long currentTime = System.currentTimeMillis();
 
-        if (currentTime >= nextAttackTime) {
-            if (Math.random() * 100.0 <= successChance.getValue()) {
-                client.interactionManager.attackEntity(
-                        client.player,
-                        target
-                );
-
-                client.player.swingHand(
-                        net.minecraft.util.Hand.MAIN_HAND
-                );
-            }
-
-            int min = minDelay.getValue();
-            int max = maxDelay.getValue();
-
-            if (max < min) {
-                max = min;
-            }
-
-            long randomDelay = min;
-
-            if (max > min) {
-                randomDelay += (long) (
-                        Math.random() * (max - min)
-                );
-            }
-
-            nextAttackTime = currentTime + randomDelay;
+        if (currentTime < nextAttackTime) {
+            return;
         }
+
+        if (Math.random() * 100.0 <= successChance.getValue()) {
+            client.interactionManager.attackEntity(
+                    client.player,
+                    target
+            );
+
+            client.player.swingHand(Hand.MAIN_HAND);
+        }
+
+        int min = Math.max(0, minDelay.getValue());
+        int max = Math.max(min, maxDelay.getValue());
+
+        long randomDelay = min;
+
+        if (max > min) {
+            randomDelay += (long) (
+                    Math.random() * (max - min + 1)
+            );
+        }
+
+        nextAttackTime = currentTime + randomDelay;
     }
 
-    private void applyAdvancedSilentAim(
+    private void applyAdvancedAim(
             MinecraftClient client,
             LivingEntity target) {
 
         Vec3d eyesPos = client.player.getEyePos();
 
         Vec3d targetPos = target.getPos().add(
-                0,
+                0.0,
                 target.getHeight() / 2.0,
-                0
+                0.0
         );
 
         if (targetPrediction.getValue()) {
@@ -193,11 +190,11 @@ public class TriggerbotModule extends Module {
                 )
         );
 
-        float yawDiff = MathHelper.wrapDegrees(
+        float yawDifference = MathHelper.wrapDegrees(
                 targetYaw - client.player.getYaw()
         );
 
-        if (Math.abs(yawDiff)
+        if (Math.abs(yawDifference)
                 > silentAimFOV.getValue() / 2.0) {
             return;
         }
@@ -213,24 +210,55 @@ public class TriggerbotModule extends Module {
 
         float adjustedYaw =
                 currentYaw
-                + MathHelper.wrapDegrees(
+                        + MathHelper.wrapDegrees(
                         targetYaw - currentYaw
                 ) / smooth;
 
         float adjustedPitch =
                 currentPitch
-                + (targetPitch - currentPitch) / smooth;
-
-        adjustedYaw += (float) (
-                (Math.random() - 0.5) * 0.2
-        );
-
-        adjustedPitch += (float) (
-                (Math.random() - 0.5) * 0.2
-        );
+                        + (targetPitch - currentPitch) / smooth;
 
         client.player.setYaw(adjustedYaw);
         client.player.setPitch(adjustedPitch);
     }
 
-    private boolean
+    private boolean isBlockedByWall(
+            MinecraftClient client,
+            LivingEntity target) {
+
+        Vec3d eyes = client.player.getEyePos();
+
+        Vec3d targetCenter = target.getPos().add(
+                0.0,
+                target.getHeight() / 2.0,
+                0.0
+        );
+
+        HitResult result = client.world.raycast(
+                new RaycastContext(
+                        eyes,
+                        targetCenter,
+                        RaycastContext.ShapeType.COLLIDER,
+                        RaycastContext.FluidHandling.NONE,
+                        client.player
+                )
+        );
+
+        return result.getType() == HitResult.Type.BLOCK;
+    }
+
+    private LivingEntity findBestTarget(MinecraftClient client) {
+        return client.world.getEntitiesByClass(
+                        LivingEntity.class,
+                        client.player.getBoundingBox()
+                                .expand(rangeSetting.getValue()),
+                        entity ->
+                                entity != client.player
+                                        && entity.isAlive()
+                                        && client.player.distanceTo(entity)
+                                        <= rangeSetting.getValue()
+                )
+                .stream()
+                .min(
+                        Comparator.comparingDouble(
+                                client.player::
