@@ -1,1 +1,13 @@
-rootProject.name = 'darkness-client'
+pluginManagement {
+    repositories {
+        maven {
+            name = 'Fabric'
+            url = 'https://maven.fabricmc.net/'
+        }
+
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'Darkness-client'
