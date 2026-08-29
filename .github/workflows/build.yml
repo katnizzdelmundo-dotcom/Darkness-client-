@@ -11,10 +11,11 @@ permissions:
 
 jobs:
   build:
+    name: Build Fabric Mod
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Set up Java 21
@@ -22,14 +23,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
 
-      - name: Build
+      - name: Show versions
+        run: |
+          java -version
+          gradle --version
+
+      - name: Build Darkness
         env:
           GRADLE_OPTS: >-
             -Dorg.gradle.daemon=false
@@ -37,8 +42,7 @@ jobs:
             -Dorg.gradle.workers.max=2
             -Xmx1536m
         run: |
-          chmod +x gradlew
-          ./gradlew build --no-daemon --stacktrace
+          gradle build --no-daemon --stacktrace
 
       - name: Upload JAR
         if: success()
@@ -47,3 +51,4 @@ jobs:
           name: Darkness-1.21.11
           path: build/libs/*.jar
           if-no-files-found: error
+          retention-days: 14
